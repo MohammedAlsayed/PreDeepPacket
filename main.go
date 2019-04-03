@@ -1,7 +1,6 @@
 package main
 
 import (
-	"fmt"
 	"io/ioutil"
 	"log"
 
@@ -21,8 +20,8 @@ func main() {
 	// }
 }
 
-func handlePacket(packet gopacket.Packet, i int) gopacket.Packet {
-	newData := processPacket(packet, i)
+func handlePacket(packet gopacket.Packet) gopacket.Packet {
+	newData := processPacket(packet)
 	newPacket := gopacket.NewPacket(newData, layers.LayerTypeIPv4, gopacket.Default)
 	return newPacket
 }
@@ -35,15 +34,14 @@ func processPcap(pacp string) {
 		i := 1
 		for packet := range packetSource.Packets() {
 			// if i == 22 {
-			handlePacket(packet, i)
+			handlePacket(packet)
 			// }
 			i++
 		}
 	}
 }
 
-func processPacket(packet gopacket.Packet, i int) []byte {
-	fmt.Println("packet: ", i)
+func processPacket(packet gopacket.Packet) []byte {
 	packetLayers := packet.Layers()
 	newPacket := make([]byte, 0)
 	isAck := false
@@ -78,7 +76,6 @@ func processPacket(packet gopacket.Packet, i int) []byte {
 	// in otherwords if the packet is empty.
 	// return nil
 	if (isAck || isFin || isSyn) && (isAppLayerEmpty || !hasAppLayer) {
-		fmt.Println(newPacket)
 		return nil
 	}
 	return newPacket
