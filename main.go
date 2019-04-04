@@ -20,12 +20,6 @@ func main() {
 	// }
 }
 
-func handlePacket(packet gopacket.Packet) gopacket.Packet {
-	newData := processPacket(packet)
-	newPacket := gopacket.NewPacket(newData, layers.LayerTypeIPv4, gopacket.Default)
-	return newPacket
-}
-
 func processPcap(pacp string) {
 	if handle, err := pcap.OpenOffline(pacp); err != nil {
 		panic(err)
@@ -33,17 +27,22 @@ func processPcap(pacp string) {
 		packetSource := gopacket.NewPacketSource(handle, handle.LinkType())
 		i := 1
 		for packet := range packetSource.Packets() {
-			// if i == 22 {
-			handlePacket(packet)
-			// }
+			if i == 110 {
+				handlePacket(packet)
+			}
 			i++
 		}
 	}
 }
 
-func processPacket(packet gopacket.Packet) []byte {
+func handlePacket(packet gopacket.Packet) gopacket.Packet {
+	newPacket := processPacket(packet)
+	return newPacket
+}
+
+func processPacket(packet gopacket.Packet) gopacket.Packet {
 	packetLayers := packet.Layers()
-	newPacket := make([]byte, 0)
+	packetData := make([]byte, 0)
 	isAck := false
 	isFin := false
 	isSyn := false
@@ -55,10 +54,14 @@ func processPacket(packet gopacket.Packet) []byte {
 		if isDataLinkLayer(layer) {
 			continue
 		}
+		// remove DNS packet
+		if isDNS(layer) {
+			return nil
+		}
 		// if upd header add zeros to the header, so its size becomes 20 bytes (equal to TCP header) instead of 8 bytes
 		if isUDPHeader(layer) {
 			newUDPHeader := pad12ByteZeros(layer)
-			newPacket = append(newPacket, newUDPHeader...)
+			packetData = append(packetData, newUDPHeader...)
 			continue
 		}
 		if isNetworkLayer(layer) {
@@ -70,14 +73,15 @@ func processPacket(packet gopacket.Packet) []byte {
 			hasAppLayer = true
 			isAppLayerEmpty = len(layer.LayerContents()) == 0
 		}
-		newPacket = append(newPacket, layer.LayerContents()...)
+		packetData = append(packetData, layer.LayerContents()...)
 	}
 	// (if ACK or FIN or SYN flags are set to 1) and (it has an empty app layer or it does not have it)
-	// in otherwords if the packet is empty.
+	// in otherwords if the packet's payload is empty, remove the packet.
 	// return nil
 	if (isAck || isFin || isSyn) && (isAppLayerEmpty || !hasAppLayer) {
 		return nil
 	}
+	newPacket := gopacket.NewPacket(packetData, layers.LayerTypeIPv4, gopacket.Default)
 	return newPacket
 }
 
@@ -125,4 +129,16 @@ func isNetworkLayer(layer gopacket.Layer) bool {
 
 func isApplicationLayer(layer gopacket.Layer) bool {
 	return layer.LayerType() == gopacket.LayerTypePayload
+}
+
+func isDNS(layer gopacket.Layer) bool {
+	if isUDPHeader(layer) {
+		udpContent := layer.LayerContents()
+		for i := 0; i < 4; i++ {
+			if udpContent[i] == 53 {
+				return true
+			}
+		}
+	}
+	return false
 }
